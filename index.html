@@ -7,6 +7,18 @@
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <style>
         body { background: #1a0b2e; color: white; font-family: 'Segoe UI', sans-serif; margin: 0; padding: 15px; }
+        .hidden { display: none; }
+        
+        /* Lobby Menu Styles */
+        .lobby-list { display: flex; flex-direction: column; gap: 12px; margin-top: 20px; }
+        .lobby-item { 
+            background: #2a1b3d; padding: 20px; border-radius: 12px; 
+            border: 2px solid #7b1fa2; display: flex; justify-content: space-between; 
+            align-items: center; cursor: pointer; font-size: 18px; font-weight: bold;
+        }
+        .lobby-item span { color: #00e676; font-size: 20px; }
+
+        /* Your Original Room Styles */
         .room-card { 
             background: #2a1b3d; margin: 10px 0; padding: 15px; 
             border-radius: 12px; border: 1px solid #7b1fa2;
@@ -15,29 +27,57 @@
         .player-count { font-size: 14px; color: #b388ff; }
         .timer-active { color: #ff5252; font-weight: bold; animation: blink 1s infinite; }
         .join-btn { background: #00e676; color: #000; border: none; padding: 10px 25px; border-radius: 8px; font-weight: bold; }
+        .back-btn { background: #444; color: white; border: none; padding: 8px 15px; border-radius: 5px; margin-bottom: 15px; }
         @keyframes blink { 50% { opacity: 0.5; } }
     </style>
 </head>
 <body>
-    <h3>🔴 Live Bingo Rooms</h3>
-    <div id="rooms"></div>
+
+    <div id="lobby-view">
+        <h3>🎰 Select Lobby</h3>
+        <div class="lobby-list">
+            <div class="lobby-item" onclick="showRooms(1)">BRONZE <span>1 USDT</span></div>
+            <div class="lobby-item" onclick="showRooms(5)">SILVER <span>5 USDT</span></div>
+            <div class="lobby-item" onclick="showRooms(10)">GOLD <span>10 USDT</span></div>
+            <div class="lobby-item" onclick="showRooms(50)">DIAMOND <span>50 USDT</span></div>
+        </div>
+    </div>
+
+    <div id="room-view" class="hidden">
+        <button class="back-btn" onclick="showLobbies()">⬅ Back to Lobbies</button>
+        <h3 id="lobby-header">Rooms</h3>
+        <div id="rooms-container"></div>
+    </div>
 
     <script>
         let tg = window.Telegram.WebApp;
         tg.expand();
 
-        // This data will eventually come from your Bot API
+        let userBalance = 0.00; // The bot will provide the actual balance here
+        let currentLobbyPrice = 0;
         let roomData = {}; 
 
+        function showRooms(price) {
+            currentLobbyPrice = price; // Store price to check later
+            document.getElementById('lobby-view').classList.add('hidden');
+            document.getElementById('room-view').classList.remove('hidden');
+            document.getElementById('lobby-header').innerText = `🔴 ${price} USDT Rooms`;
+            renderRooms();
+        }
+
+        function showLobbies() {
+            document.getElementById('room-view').classList.add('hidden');
+            document.getElementById('lobby-view').classList.remove('hidden');
+        }
+
         function renderRooms() {
-            const container = document.getElementById('rooms');
+            const container = document.getElementById('rooms-container');
             container.innerHTML = '';
             
             for(let i=1; i<=100; i++) {
-                let count = roomData[i] || 0; // Starts at 0, not random
+                let count = roomData[i] || 0;
                 let status = `<span class="player-count">👤 Players: ${count}/170</span>`;
                 
-                // ONLY show timer if count is 10 or more
                 if(count >= 10) {
                     status = `<span class="timer-active">⏱ Starting in 7s... (${count} joined)</span>`;
                 }
@@ -48,20 +88,26 @@
                             <strong>Room #${i}</strong><br>
                             ${status}
                         </div>
-                        <button class="join-btn" onclick="join(${i})">JOIN</button>
+                        <button class="join-btn" onclick="joinRoom(${i})">JOIN</button>
                     </div>
                 `;
             }
         }
 
-        function join(id) {
-            // Logic to tell the bot "User joined Room ID"
-            tg.sendData(JSON.stringify({action: "join_room", room: id}));
-            alert("Waiting for players...");
+        function joinRoom(id) {
+            // THE BALANCE CHECK (Only happens here)
+            if (userBalance >= currentLobbyPrice) {
+                tg.sendData(JSON.stringify({
+                    action: "join_room", 
+                    room: id, 
+                    lobby: currentLobbyPrice
+                }));
+                alert("Joining...");
+            } else {
+                // If balance is too low
+                alert("❌ Low balance! You need " + currentLobbyPrice + " USDT to join this room.");
+            }
         }
-
-        renderRooms();
     </script>
 </body>
 </html>
- 
