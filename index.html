@@ -3,23 +3,10 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Addis Bingo - Lobby</title>
+    <title>Addis Bingo - Live Rooms</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <style>
         body { background: #1a0b2e; color: white; font-family: 'Segoe UI', sans-serif; margin: 0; padding: 15px; }
-        .hidden { display: none; }
-        
-        /* Lobby Styles */
-        .lobby-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-top: 20px; }
-        .lobby-card { 
-            background: linear-gradient(145deg, #3d1b5d, #2a1b3d);
-            padding: 20px; border-radius: 15px; text-align: center;
-            border: 2px solid #7b1fa2; cursor: pointer; transition: 0.2s;
-        }
-        .lobby-card:active { transform: scale(0.95); }
-        .lobby-price { font-size: 24px; font-weight: bold; color: #00e676; display: block; }
-        
-        /* Room Styles */
         .room-card { 
             background: #2a1b3d; margin: 10px 0; padding: 15px; 
             border-radius: 12px; border: 1px solid #7b1fa2;
@@ -28,93 +15,53 @@
         .player-count { font-size: 14px; color: #b388ff; }
         .timer-active { color: #ff5252; font-weight: bold; animation: blink 1s infinite; }
         .join-btn { background: #00e676; color: #000; border: none; padding: 10px 25px; border-radius: 8px; font-weight: bold; }
-        .back-btn { background: #555; color: white; border: none; padding: 5px 10px; border-radius: 5px; margin-bottom: 10px; }
         @keyframes blink { 50% { opacity: 0.5; } }
     </style>
 </head>
 <body>
-
-    <div id="lobby-view">
-        <h3>🎰 Select a Lobby</h3>
-        <div class="lobby-grid">
-            <div class="lobby-card" onclick="openRooms(1)">
-                <span>BRONZE</span>
-                <span class="lobby-price">1 USDT</span>
-            </div>
-            <div class="lobby-card" onclick="openRooms(5)">
-                <span>SILVER</span>
-                <span class="lobby-price">5 USDT</span>
-            </div>
-            <div class="lobby-card" onclick="openRooms(10)">
-                <span>GOLD</span>
-                <span class="lobby-price">10 USDT</span>
-            </div>
-            <div class="lobby-card" onclick="openRooms(50)">
-                <span>DIAMOND</span>
-                <span class="lobby-price">50 USDT</span>
-            </div>
-        </div>
-    </div>
-
-    <div id="room-view" class="hidden">
-        <button class="back-btn" onclick="showLobby()">⬅ Back to Lobbies</button>
-        <h3 id="selected-lobby-title">Rooms</h3>
-        <div id="rooms-container"></div>
-    </div>
+    <h3>🔴 Live Bingo Rooms</h3>
+    <div id="rooms"></div>
 
     <script>
         let tg = window.Telegram.WebApp;
         tg.expand();
 
-        // User Data Simulation (In production, get this from your Bot API)
-        let userBalance = 0.50; // Example: User has 0.50 USDT
-        let currentLobbyFee = 0;
-
-        function openRooms(fee) {
-            currentLobbyFee = fee;
-            document.getElementById('lobby-view').classList.add('hidden');
-            document.getElementById('room-view').classList.remove('hidden');
-            document.getElementById('selected-lobby-title').innerText = fee + " USDT Lobby - Live Rooms";
-            renderRooms();
-        }
-
-        function showLobby() {
-            document.getElementById('room-view').classList.add('hidden');
-            document.getElementById('lobby-view').classList.remove('hidden');
-        }
+        // This data will eventually come from your Bot API
+        let roomData = {}; 
 
         function renderRooms() {
-            const container = document.getElementById('rooms-container');
+            const container = document.getElementById('rooms');
             container.innerHTML = '';
             
-            for(let i=1; i<=20; i++) { // Showing 20 rooms for example
+            for(let i=1; i<=100; i++) {
+                let count = roomData[i] || 0; // Starts at 0, not random
+                let status = `<span class="player-count">👤 Players: ${count}/170</span>`;
+                
+                // ONLY show timer if count is 10 or more
+                if(count >= 10) {
+                    status = `<span class="timer-active">⏱ Starting in 7s... (${count} joined)</span>`;
+                }
+
                 container.innerHTML += `
                     <div class="room-card">
                         <div>
                             <strong>Room #${i}</strong><br>
-                            <span class="player-count">👤 0/170 Players</span>
+                            ${status}
                         </div>
-                        <button class="join-btn" onclick="joinRoom(${i})">JOIN</button>
+                        <button class="join-btn" onclick="join(${i})">JOIN</button>
                     </div>
                 `;
             }
         }
 
-        function joinRoom(roomId) {
-            // STEP: CHECK BALANCE
-            if (userBalance >= currentLobbyFee) {
-                // SUCCESS
-                tg.sendData(JSON.stringify({
-                    action: "join_room", 
-                    room: roomId, 
-                    fee: currentLobbyFee
-                }));
-                alert("Joining Room #" + roomId + "...");
-            } else {
-                // FAILURE
-                alert("❌ Low Balance!\nRequired: " + currentLobbyFee + " USDT\nYour Balance: " + userBalance + " USDT");
-            }
+        function join(id) {
+            // Logic to tell the bot "User joined Room ID"
+            tg.sendData(JSON.stringify({action: "join_room", room: id}));
+            alert("Waiting for players...");
         }
+
+        renderRooms();
     </script>
 </body>
 </html>
+ 
