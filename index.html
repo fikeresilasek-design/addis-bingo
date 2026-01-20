@@ -9,32 +9,18 @@
         body { background: #1a0b2e; color: white; font-family: sans-serif; text-align: center; margin: 0; padding: 15px; }
         .room-card { 
             background: rgba(255,255,255,0.05); 
-            margin: 8px 0; 
-            padding: 12px; 
-            border-radius: 12px; 
-            border: 1px solid #4a148c;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
+            margin: 8px 0; padding: 12px; border-radius: 12px; 
+            border: 1px solid #4a148c; display: flex;
+            justify-content: space-between; align-items: center;
         }
-        .room-info { text-align: left; }
-        .room-no { font-weight: bold; color: #7c4dff; display: block; }
-        .player-count { font-size: 12px; color: #00ff00; }
-        .join-btn { 
-            background: #ffea00; 
-            color: black; 
-            border: none; 
-            padding: 8px 20px; 
-            border-radius: 20px; 
-            font-weight: bold; 
-        }
-        .header { position: sticky; top: 0; background: #1a0b2e; padding: 10px; border-bottom: 1px solid #333; margin-bottom: 10px; }
+        .status-waiting { color: #ffea00; font-size: 12px; }
+        .status-ready { color: #00ff00; font-size: 12px; font-weight: bold; }
+        .join-btn { background: #ffea00; color: black; border: none; padding: 8px 20px; border-radius: 20px; font-weight: bold; cursor: pointer; }
+        .join-btn:disabled { background: #555; cursor: not-allowed; }
+        .timer { color: #ff3d00; font-weight: bold; }
     </style>
 </head>
 <body>
-    <div class="header">
-        <h3>AVAILABLE ROOMS (1-100)</h3>
-    </div>
     <div id="room-list"></div>
 
     <script>
@@ -42,20 +28,42 @@
         tg.expand();
 
         const container = document.getElementById('room-list');
+
         for(let i=1; i<=100; i++) {
-            // Random players between 10 and 170 as requested
-            let players = Math.floor(Math.random() * (170 - 10 + 1)) + 10;
-            
+            // Simulated current players
+            let players = Math.floor(Math.random() * 15); 
+            let statusHtml = '';
+            let btnAttr = '';
+
+            if (players >= 10) {
+                // If 10 or more, show the 7s countdown logic
+                statusHtml = `<span class="status-ready">Ready! Starting in <span class="timer">7s</span></span>`;
+            } else {
+                statusHtml = `<span class="status-waiting">Waiting... (${players}/10)</span>`;
+            }
+
             container.innerHTML += `
-                <div class="room-card">
-                    <div class="room-info">
-                        <span class="room-no">Room #${i}</span>
-                        <span class="player-count">👥 ${players}/170 Players</span>
+                <div class="room-card" id="room-${i}">
+                    <div style="text-align:left">
+                        <span style="display:block; font-weight:bold;">Room #${i}</span>
+                        ${statusHtml}
                     </div>
-                    <button class="join-btn" onclick="tg.close()">JOIN</button>
+                    <button class="join-btn" onclick="joinRoom(${i}, ${players})">JOIN</button>
                 </div>
             `;
+        }
+
+        function joinRoom(roomId, currentPlayers) {
+            if (currentPlayers >= 10) {
+                alert("Room is starting in 7 seconds! You are joining just in time.");
+            } else {
+                alert("Joined! Waiting for " + (10 - currentPlayers) + " more players.");
+            }
+            // Logic to actually join the game would go here
+            tg.close();
         }
     </script>
 </body>
 </html>
+
+
