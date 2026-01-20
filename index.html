@@ -3,67 +3,64 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Addis Bingo Rooms</title>
+    <title>Addis Bingo - Live Rooms</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <style>
-        body { background: #1a0b2e; color: white; font-family: sans-serif; text-align: center; margin: 0; padding: 15px; }
+        body { background: #1a0b2e; color: white; font-family: 'Segoe UI', sans-serif; margin: 0; padding: 15px; }
         .room-card { 
-            background: rgba(255,255,255,0.05); 
-            margin: 8px 0; padding: 12px; border-radius: 12px; 
-            border: 1px solid #4a148c; display: flex;
-            justify-content: space-between; align-items: center;
+            background: #2a1b3d; margin: 10px 0; padding: 15px; 
+            border-radius: 12px; border: 1px solid #7b1fa2;
+            display: flex; justify-content: space-between; align-items: center;
         }
-        .status-waiting { color: #ffea00; font-size: 12px; }
-        .status-ready { color: #00ff00; font-size: 12px; font-weight: bold; }
-        .join-btn { background: #ffea00; color: black; border: none; padding: 8px 20px; border-radius: 20px; font-weight: bold; cursor: pointer; }
-        .join-btn:disabled { background: #555; cursor: not-allowed; }
-        .timer { color: #ff3d00; font-weight: bold; }
+        .player-count { font-size: 14px; color: #b388ff; }
+        .timer-active { color: #ff5252; font-weight: bold; animation: blink 1s infinite; }
+        .join-btn { background: #00e676; color: #000; border: none; padding: 10px 25px; border-radius: 8px; font-weight: bold; }
+        @keyframes blink { 50% { opacity: 0.5; } }
     </style>
 </head>
 <body>
-    <div id="room-list"></div>
+    <h3>🔴 Live Bingo Rooms</h3>
+    <div id="rooms"></div>
 
     <script>
         let tg = window.Telegram.WebApp;
         tg.expand();
 
-        const container = document.getElementById('room-list');
+        // This data will eventually come from your Bot API
+        let roomData = {}; 
 
-        for(let i=1; i<=100; i++) {
-            // Simulated current players
-            let players = Math.floor(Math.random() * 15); 
-            let statusHtml = '';
-            let btnAttr = '';
+        function renderRooms() {
+            const container = document.getElementById('rooms');
+            container.innerHTML = '';
+            
+            for(let i=1; i<=100; i++) {
+                let count = roomData[i] || 0; // Starts at 0, not random
+                let status = `<span class="player-count">👤 Players: ${count}/170</span>`;
+                
+                // ONLY show timer if count is 10 or more
+                if(count >= 10) {
+                    status = `<span class="timer-active">⏱ Starting in 7s... (${count} joined)</span>`;
+                }
 
-            if (players >= 10) {
-                // If 10 or more, show the 7s countdown logic
-                statusHtml = `<span class="status-ready">Ready! Starting in <span class="timer">7s</span></span>`;
-            } else {
-                statusHtml = `<span class="status-waiting">Waiting... (${players}/10)</span>`;
-            }
-
-            container.innerHTML += `
-                <div class="room-card" id="room-${i}">
-                    <div style="text-align:left">
-                        <span style="display:block; font-weight:bold;">Room #${i}</span>
-                        ${statusHtml}
+                container.innerHTML += `
+                    <div class="room-card">
+                        <div>
+                            <strong>Room #${i}</strong><br>
+                            ${status}
+                        </div>
+                        <button class="join-btn" onclick="join(${i})">JOIN</button>
                     </div>
-                    <button class="join-btn" onclick="joinRoom(${i}, ${players})">JOIN</button>
-                </div>
-            `;
+                `;
+            }
         }
 
-        function joinRoom(roomId, currentPlayers) {
-            if (currentPlayers >= 10) {
-                alert("Room is starting in 7 seconds! You are joining just in time.");
-            } else {
-                alert("Joined! Waiting for " + (10 - currentPlayers) + " more players.");
-            }
-            // Logic to actually join the game would go here
-            tg.close();
+        function join(id) {
+            // Logic to tell the bot "User joined Room ID"
+            tg.sendData(JSON.stringify({action: "join_room", room: id}));
+            alert("Waiting for players...");
         }
+
+        renderRooms();
     </script>
 </body>
 </html>
-
-
