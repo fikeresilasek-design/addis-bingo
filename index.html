@@ -1,96 +1,35 @@
-<!DOCTYPE html>
-<html>
-<head>
-    <style>
-        /* Basic styling to keep things clean */
-        #web3-interface { display: none; padding: 20px; text-align: center; border: 1px solid #444; }
-        .lobby-button { padding: 10px 20px; margin: 10px; cursor: pointer; font-weight: bold; }
-    </style>
-</head>
-<body>
-
-    <div id="bingo-selection">
-        <h1>Play Bingo</h1>
-        <p>Select your lobby:</p>
-        <button class="lobby-button" onclick="goToWeb3(1)">1 USDT Lobby</button>
-        <button class="lobby-button" onclick="goToWeb3(5)">5 USDT Lobby</button>
-        <button class="lobby-button" onclick="goToWeb3(10)">10 USDT Lobby</button>
-    </div>
-
-    <div id="web3-interface">
-        <h2>Web3 Lobby</h2>
-        <p>Wallet Connected: 0x...4f92</p>
-        <hr>
-        <button class="lobby-button" onclick="tryJoinRoom()" style="background-color: #27ae60; color: white;">JOIN ROOM</button>
-    </div>
-
-    <script>
-        // Set this to whatever the user's actual balance is
-        let userBalance = 0.50; 
-        let selectedLobbyPrice = 0;
-
-        function goToWeb3(price) {
-            // Save the price of the lobby they clicked
-            selectedLobbyPrice = price; 
-            
-            // Switch from selection screen to Web3 screen
-            document.getElementById('bingo-selection').style.display = 'none';
-            document.getElementById('web3-interface').style.display = 'block';
-        }
-
-        function tryJoinRoom() {
-            // The Bot checks: Is balance (0.50) less than Lobby Price (1, 5, or 10)?
-            if (userBalance < selectedLobbyPrice) {
-                alert("Your balance is too low. You need " + selectedLobbyPrice + " USDT to enter this room.");
-            } else {
-                alert("Success! You have enough balance. Entering Room...");
-                // Place your actual game start code here
-            }
-        }
-    </script>
-
-</body>
-</html>
 <script>
-    // 1. SETTINGS: Set the user's current balance here
-    // If this number is lower than the lobby price, the error will show.
+    // This is the "Database". In a real app, this comes from the server.
     let userBalance = 0.50; 
     let activeLobbyPrice = 0;
 
-    /**
-     * Function: goToWeb3
-     * This runs when a user clicks 1 USDT, 5 USDT, or 10 USDT.
-     */
     function goToWeb3(lobbyPrice) {
-        // Store the price of the lobby the user selected
         activeLobbyPrice = lobbyPrice; 
-        console.log("User selected the " + lobbyPrice + " USDT lobby.");
+        
+        // UI Switch
+        document.getElementById('bingo-selection').style.display = 'none';
+        document.getElementById('web3-interface').style.display = 'block';
+    }
 
-        // Switch the screens
-        const selectionScreen = document.getElementById('bingo-selection');
-        const web3Screen = document.getElementById('web3-interface');
+    // This is the "Bot" logic you are asking about
+    function tryJoinRoom() {
+        console.log("Bot is now checking balance...");
 
-        if (selectionScreen && web3Screen) {
-            selectionScreen.style.display = 'none';
-            web3Screen.style.display = 'block';
+        // 1. The Bot fetches the current userBalance
+        // 2. The Bot compares it to the activeLobbyPrice
+        if (userBalance < activeLobbyPrice) {
+            // If check fails:
+            alert("❌ Access Denied: Your balance is " + userBalance + " USDT. You need " + activeLobbyPrice + " USDT.");
+        } else {
+            // If check passes:
+            alert("✅ Access Granted! Bot verified your balance of " + userBalance + " USDT. Entering room...");
+            // Start game logic here
         }
     }
 
-    /**
-     * Function: tryJoinRoom
-     * This is the 'Bot' logic that checks the balance.
-     */
-    function tryJoinRoom() {
-        // The comparison logic: Is balance less than the required price?
-        if (userBalance < activeLobbyPrice) {
-            // This is the specific "Low Balance" error you requested
-            alert("Error: Your balance is too low. You need at least " + activeLobbyPrice + " USDT to join this room.");
-            console.log("Access Denied: Balance " + userBalance + " is less than " + activeLobbyPrice);
-        } else {
-            // This runs only if they have enough money
-            alert("Balance Verified! Joining the " + activeLobbyPrice + " USDT room now...");
-            // You can add your code to start the bingo game here
-        }
+    // Function to simulate a deposit so you can pass the check
+    function simulateDeposit(amount) {
+        userBalance += amount;
+        alert("Deposit Successful! New Balance: " + userBalance + " USDT");
     }
 </script>
-
