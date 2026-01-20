@@ -1,66 +1,48 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Addis Bingo - Live Rooms</title>
-    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <title>Bingo Game</title>
     <style>
-        body { background: #1a0b2e; color: white; font-family: 'Segoe UI', sans-serif; margin: 0; padding: 15px; }
-        .room-card { 
-            background: #2a1b3d; margin: 10px 0; padding: 15px; 
-            border-radius: 12px; border: 1px solid #7b1fa2;
-            display: flex; justify-content: space-between; align-items: center;
+        /* This hides the Web3 section until a button is clicked */
+        #web3-interface {
+            display: none; 
+            padding: 20px;
+            border: 1px solid #ccc;
+            text-align: center;
         }
-        .player-count { font-size: 14px; color: #b388ff; }
-        .timer-active { color: #ff5252; font-weight: bold; animation: blink 1s infinite; }
-        .join-btn { background: #00e676; color: #000; border: none; padding: 10px 25px; border-radius: 8px; font-weight: bold; }
-        @keyframes blink { 50% { opacity: 0.5; } }
+        .bet-button { margin: 5px; padding: 10px; cursor: pointer; }
     </style>
 </head>
 <body>
-    <h3>🔴 Live Bingo Rooms</h3>
-    <div id="rooms"></div>
+
+    <div id="bingo-selection">
+        <h1>Play Bingo</h1>
+        <button class="bet-button" onclick="goToWeb3(1)">1 USDT</button>
+        <button class="bet-button" onclick="goToWeb3(5)">5 USDT</button>
+        <button class="bet-button" onclick="goToWeb3(10)">10 USDT</button>
+    </div>
+
+    <div id="web3-interface">
+        <h2>Web3 Wallet Connected</h2>
+        <p>Wallet: 0x...4f92</p>
+        <button onclick="tryJoinRoom()">Join Room</button>
+    </div>
 
     <script>
-        let tg = window.Telegram.WebApp;
-        tg.expand();
-
-        // This data will eventually come from your Bot API
-        let roomData = {}; 
-
-        function renderRooms() {
-            const container = document.getElementById('rooms');
-            container.innerHTML = '';
-            
-            for(let i=1; i<=100; i++) {
-                let count = roomData[i] || 0; // Starts at 0, not random
-                let status = `<span class="player-count">👤 Players: ${count}/170</span>`;
-                
-                // ONLY show timer if count is 10 or more
-                if(count >= 10) {
-                    status = `<span class="timer-active">⏱ Starting in 7s... (${count} joined)</span>`;
-                }
-
-                container.innerHTML += `
-                    <div class="room-card">
-                        <div>
-                            <strong>Room #${i}</strong><br>
-                            ${status}
-                        </div>
-                        <button class="join-btn" onclick="join(${i})">JOIN</button>
-                    </div>
-                `;
-            }
+        // This function handles the "Play Bingo" button click
+        function goToWeb3(amount) {
+            // Hide the bingo buttons
+            document.getElementById('bingo-selection').style.display = 'none';
+            // Show the Web3 Join Room section
+            document.getElementById('web3-interface').style.display = 'block';
         }
 
-        function join(id) {
-            // Logic to tell the bot "User joined Room ID"
-            tg.sendData(JSON.stringify({action: "join_room", room: id}));
-            alert("Waiting for players...");
+        // This function handles the "Join Room" button click
+        function tryJoinRoom() {
+            // The specific error message you requested
+            alert("Your balance is too low");
         }
-
-        renderRooms();
     </script>
+
 </body>
 </html>
