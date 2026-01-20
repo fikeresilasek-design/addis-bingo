@@ -1,48 +1,96 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Bingo Game</title>
     <style>
-        /* This hides the Web3 section until a button is clicked */
-        #web3-interface {
-            display: none; 
-            padding: 20px;
-            border: 1px solid #ccc;
-            text-align: center;
-        }
-        .bet-button { margin: 5px; padding: 10px; cursor: pointer; }
+        /* Basic styling to keep things clean */
+        #web3-interface { display: none; padding: 20px; text-align: center; border: 1px solid #444; }
+        .lobby-button { padding: 10px 20px; margin: 10px; cursor: pointer; font-weight: bold; }
     </style>
 </head>
 <body>
 
     <div id="bingo-selection">
         <h1>Play Bingo</h1>
-        <button class="bet-button" onclick="goToWeb3(1)">1 USDT</button>
-        <button class="bet-button" onclick="goToWeb3(5)">5 USDT</button>
-        <button class="bet-button" onclick="goToWeb3(10)">10 USDT</button>
+        <p>Select your lobby:</p>
+        <button class="lobby-button" onclick="goToWeb3(1)">1 USDT Lobby</button>
+        <button class="lobby-button" onclick="goToWeb3(5)">5 USDT Lobby</button>
+        <button class="lobby-button" onclick="goToWeb3(10)">10 USDT Lobby</button>
     </div>
 
     <div id="web3-interface">
-        <h2>Web3 Wallet Connected</h2>
-        <p>Wallet: 0x...4f92</p>
-        <button onclick="tryJoinRoom()">Join Room</button>
+        <h2>Web3 Lobby</h2>
+        <p>Wallet Connected: 0x...4f92</p>
+        <hr>
+        <button class="lobby-button" onclick="tryJoinRoom()" style="background-color: #27ae60; color: white;">JOIN ROOM</button>
     </div>
 
     <script>
-        // This function handles the "Play Bingo" button click
-        function goToWeb3(amount) {
-            // Hide the bingo buttons
+        // Set this to whatever the user's actual balance is
+        let userBalance = 0.50; 
+        let selectedLobbyPrice = 0;
+
+        function goToWeb3(price) {
+            // Save the price of the lobby they clicked
+            selectedLobbyPrice = price; 
+            
+            // Switch from selection screen to Web3 screen
             document.getElementById('bingo-selection').style.display = 'none';
-            // Show the Web3 Join Room section
             document.getElementById('web3-interface').style.display = 'block';
         }
 
-        // This function handles the "Join Room" button click
         function tryJoinRoom() {
-            // The specific error message you requested
-            alert("Your balance is too low");
+            // The Bot checks: Is balance (0.50) less than Lobby Price (1, 5, or 10)?
+            if (userBalance < selectedLobbyPrice) {
+                alert("Your balance is too low. You need " + selectedLobbyPrice + " USDT to enter this room.");
+            } else {
+                alert("Success! You have enough balance. Entering Room...");
+                // Place your actual game start code here
+            }
         }
     </script>
 
 </body>
 </html>
+<script>
+    // 1. SETTINGS: Set the user's current balance here
+    // If this number is lower than the lobby price, the error will show.
+    let userBalance = 0.50; 
+    let activeLobbyPrice = 0;
+
+    /**
+     * Function: goToWeb3
+     * This runs when a user clicks 1 USDT, 5 USDT, or 10 USDT.
+     */
+    function goToWeb3(lobbyPrice) {
+        // Store the price of the lobby the user selected
+        activeLobbyPrice = lobbyPrice; 
+        console.log("User selected the " + lobbyPrice + " USDT lobby.");
+
+        // Switch the screens
+        const selectionScreen = document.getElementById('bingo-selection');
+        const web3Screen = document.getElementById('web3-interface');
+
+        if (selectionScreen && web3Screen) {
+            selectionScreen.style.display = 'none';
+            web3Screen.style.display = 'block';
+        }
+    }
+
+    /**
+     * Function: tryJoinRoom
+     * This is the 'Bot' logic that checks the balance.
+     */
+    function tryJoinRoom() {
+        // The comparison logic: Is balance less than the required price?
+        if (userBalance < activeLobbyPrice) {
+            // This is the specific "Low Balance" error you requested
+            alert("Error: Your balance is too low. You need at least " + activeLobbyPrice + " USDT to join this room.");
+            console.log("Access Denied: Balance " + userBalance + " is less than " + activeLobbyPrice);
+        } else {
+            // This runs only if they have enough money
+            alert("Balance Verified! Joining the " + activeLobbyPrice + " USDT room now...");
+            // You can add your code to start the bingo game here
+        }
+    }
+</script>
+
