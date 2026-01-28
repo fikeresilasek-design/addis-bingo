@@ -24,8 +24,9 @@
 
         /* Right Section */
         .play-area { width: 55%; }
-        .current-call-display { background: #dfdbe5; border: 4px solid #ff7043; border-radius: 15px; padding: 10px; margin-bottom: 10px; }
-        .call-circle { background: #ff7043; width: 50px; height: 50px; border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 5px auto; font-size: 18px; font-weight: bold; box-shadow: inset 0 0 10px rgba(0,0,0,0.2); }
+        .current-call-display { background: #dfdbe5; border: 4px solid #ff7043; border-radius: 15px; padding: 10px; margin-bottom: 10px; position: relative; }
+        .call-circle { background: #ff7043; width: 50px; height: 50px; border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 5px auto; font-size: 18px; font-weight: bold; box-shadow: inset 0 0 10px rgba(0,0,0,0.2); transition: all 0.3s; }
+        .countdown-text { color: #333; font-size: 14px; font-weight: bold; margin-bottom: 2px; }
 
         /* Player Card */
         .player-card { display: grid; grid-template-columns: repeat(5, 1fr); gap: 3px; background: #5a3a6b; padding: 5px; border-radius: 10px; }
@@ -43,35 +44,45 @@
 </head>
 <body>
 
-    <div class="stats-bar">
-        <div class="stat-box">Game<span>GH1980</span></div>
-        <div class="stat-box">Players<span>--</span></div>
-        <div class="stat-box">Bet<span>10</span></div>
-        <div class="stat-box">Call<span>0</span></div>
-    </div>
-
-    <div class="game-container">
-        <div id="master-board" class="master-board">
-            <div class="m-cell m-header">B</div><div class="m-cell m-header">I</div><div class="m-cell m-header">N</div><div class="m-cell m-header">G</div><div class="m-cell m-header">O</div>
-            </div>
-
-        <div class="play-area">
-            <div class="current-call-display">
-                <div style="color: #333; font-size: 12px;">Current Call</div>
-                <div id="call-ball" class="call-circle">-</div>
-            </div>
-
-            <div id="player-card" class="player-card">
-                </div>
-            <div style="font-size: 10px; margin-top: 5px;">Board number <span id="board-id">37</span></div>
+    <div id="lobby-view">
+        <h3 style="color: #fbc02d;">🔴 Select a Bingo Lobby</h3>
+        <div style="display: flex; flex-direction: column; gap: 10px;">
+            <button class="bingo-btn" onclick="openGame(1)">BRONZE (1 USDT)</button>
+            <button class="bingo-btn" onclick="openGame(5)">SILVER (5 USDT)</button>
+            <button class="bingo-btn" onclick="openGame(10)">GOLD (10 USDT)</button>
         </div>
     </div>
 
-    <button class="bingo-btn" onclick="checkWin()">BINGO!</button>
+    <div id="game-view" class="hidden">
+        <div class="stats-bar">
+            <div class="stat-box">GameID<span>GH1980</span></div>
+            <div class="stat-box">Bonus<span>On</span></div>
+            <div class="stat-box">Bet<span id="bet-amount">10</span></div>
+            <div class="stat-box">Players<span id="player-count">0</span></div>
+        </div>
 
-    <div class="bottom-btns">
-        <button class="small-btn refresh" onclick="location.reload()">Refresh</button>
-        <button class="small-btn leave" onclick="tg.close()">Leave</button>
+        <div class="game-container">
+            <div id="master-board" class="master-board">
+                <div class="m-cell m-header">B</div><div class="m-cell m-header">I</div><div class="m-cell m-header">N</div><div class="m-cell m-header">G</div><div class="m-cell m-header">O</div>
+            </div>
+
+            <div class="play-area">
+                <div class="current-call-display">
+                    <div id="status-label" class="countdown-text">Waiting...</div>
+                    <div id="call-ball" class="call-circle">-</div>
+                </div>
+
+                <div id="player-card" class="player-card"></div>
+                <div style="font-size: 10px; margin-top: 5px;">Board number <span id="board-id">37</span></div>
+            </div>
+        </div>
+
+        <button class="bingo-btn" onclick="claimBingo()">BINGO!</button>
+
+        <div class="bottom-btns">
+            <button class="small-btn refresh" onclick="location.reload()">Refresh</button>
+            <button class="small-btn leave" onclick="tg.close()">Leave</button>
+        </div>
     </div>
 
     <script>
@@ -80,9 +91,20 @@
 
         let calledNumbers = [];
         let playerCardNums = [];
-        let markedIndices = [12]; // Center Star
+        let markedIndices = [12]; 
+        let playerCount = 0;
+        let isStarted = false;
 
-        // 1. Generate Master Board (1-75)
+        function openGame(price) {
+            document.getElementById('lobby-view').classList.add('hidden');
+            document.getElementById('game-view').classList.remove('hidden');
+            document.getElementById('bet-amount').innerText = price;
+            
+            initMasterBoard();
+            initPlayerCard();
+            waitForPlayers();
+        }
+
         function initMasterBoard() {
             const board = document.getElementById('master-board');
             for (let i = 1; i <= 75; i++) {
@@ -94,46 +116,56 @@
             }
         }
 
-        // 2. Generate Player Card
         function initPlayerCard() {
             const card = document.getElementById('player-card');
             let pool = Array.from({length: 75}, (_, i) => i + 1).sort(() => Math.random() - 0.5);
             playerCardNums = pool.slice(0, 25);
-
             playerCardNums.forEach((num, i) => {
                 let cell = document.createElement('div');
                 cell.className = 'p-cell';
-                if(i === 12) {
-                    cell.innerText = '★';
-                    cell.classList.add('star');
-                } else {
-                    cell.innerText = num;
-                    cell.onclick = () => markCell(i, num);
-                }
+                if(i === 12) { cell.innerText = '★'; cell.classList.add('star'); }
+                else { cell.innerText = num; cell.onclick = () => markCell(i, num); }
                 cell.id = `p-${i}`;
                 card.appendChild(cell);
             });
         }
 
-        // 3. Game Algorithm
-        function startCalling() {
+        // --- MULTIPLAYER START ALGORITHM ---
+        function waitForPlayers() {
+            let joinSim = setInterval(() => {
+                if (playerCount < 10) {
+                    playerCount += Math.floor(Math.random() * 2) + 1;
+                    document.getElementById('player-count').innerText = playerCount;
+                } else {
+                    clearInterval(joinSim);
+                    startCountdown();
+                }
+            }, 1000);
+        }
+
+        function startCountdown() {
+            let timer = 10;
+            document.getElementById('status-label').innerText = "Count Down";
+            let cd = setInterval(() => {
+                document.getElementById('call-ball').innerText = timer;
+                if (timer <= 0) {
+                    clearInterval(cd);
+                    document.getElementById('status-label').innerText = "Started";
+                    beginGame();
+                }
+                timer--;
+            }, 1000);
+        }
+
+        function beginGame() {
+            isStarted = true;
             let shuffle = Array.from({length: 75}, (_, i) => i + 1).sort(() => Math.random() - 0.5);
             setInterval(() => {
                 let num = shuffle.pop();
                 calledNumbers.push(num);
-                
-                // Update Master Board
                 document.getElementById(`m-${num}`).classList.add('called');
-                
-                // Update Call Ball
-                const ball = document.getElementById('call-ball');
-                ball.innerText = num;
-                
-                // Add Animation
-                ball.style.transform = "scale(1.2)";
-                setTimeout(() => ball.style.transform = "scale(1)", 200);
-
-            }, 4000); // 4 seconds per call like the video
+                document.getElementById('call-ball').innerText = num;
+            }, 4000);
         }
 
         function markCell(idx, val) {
@@ -143,17 +175,10 @@
             }
         }
 
-        function checkWin() {
-            // Winning patterns check logic
-            // If win -> tg.sendData(...)
-            alert("Checking Patterns...");
+        function claimBingo() {
+            // Your win verification logic here
+            tg.sendData(JSON.stringify({status: "CLAIM", fee: document.getElementById('bet-amount').innerText}));
         }
-
-        window.onload = () => {
-            initMasterBoard();
-            initPlayerCard();
-            startCalling();
-        };
     </script>
 </body>
 </html>
