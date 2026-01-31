@@ -1,223 +1,228 @@
-<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Addis Bingo - Live Rooms</title>
-    <script src="https://telegram.org/js/telegram-web-app.js"></script>
-    <style>
-        body { background: #1a0b2e; color: white; font-family: 'Segoe UI', sans-serif; margin: 0; padding: 15px; overflow-x: hidden; }
-        .hidden { display: none; }
-        
-        /* Lobby Selection Styles */
-        .lobby-container { display: flex; flex-direction: column; gap: 12px; margin-top: 20px; }
-        .lobby-card { 
-            background: #2a1b3d; padding: 20px; border-radius: 12px; 
-            border: 2px solid #7b1fa2; display: flex; justify-content: space-between; align-items: center;
-            cursor: pointer; font-size: 18px; font-weight: bold;
-        }
-        .lobby-card span { color: #00e676; font-size: 20px; }
+cat << 'EOF' > bingo.py
+import telebot, sqlite3, requests, time, hmac, hashlib
+from telebot import types
 
-        /* Room List Styles */
-        .room-card { 
-            background: #2a1b3d; margin: 10px 0; padding: 15px; 
-            border-radius: 12px; border: 1px solid #7b1fa2;
-            display: flex; justify-content: space-between; align-items: center;
-        }
-        .player-count { font-size: 14px; color: #b388ff; }
-        .timer-active { color: #ff5252; font-weight: bold; animation: blink 1s infinite; }
-        .join-btn { background: #00e676; color: #000; border: none; padding: 10px 25px; border-radius: 8px; font-weight: bold; cursor: pointer; }
-        .back-btn { background: #444; color: white; border: none; padding: 8px 15px; border-radius: 5px; margin-bottom: 15px; cursor: pointer; }
-        @keyframes blink { 50% { opacity: 0.5; } }
+TOKEN = "8011067020:AAEUVoevMaKiUNMv_HMZRLnWyAL6gYrU7IQ"
+bot = telebot.TeleBot(TOKEN)
 
-        /* --- BINGO GAME STYLES --- */
-        .game-header { text-align: center; margin-bottom: 20px; }
-        #current-number { font-size: 48px; color: #00e676; background: #000; display: inline-block; padding: 10px 20px; border-radius: 50%; border: 3px solid #7b1fa2; }
-        .bingo-grid { 
-            display: grid; grid-template-columns: repeat(5, 1fr); gap: 5px; 
-            max-width: 350px; margin: 0 auto; background: #7b1fa2; padding: 5px; border-radius: 8px;
-        }
-        .cell { 
-            background: #2a1b3d; aspect-ratio: 1; display: flex; align-items: center; 
-            justify-content: center; font-size: 18px; font-weight: bold; cursor: pointer; border-radius: 4px;
-        }
-        .cell.marked { background: #00e676; color: #000; }
-        .cell.free { background: #ff5252; font-size: 12px; }
-        .win-btn { 
-            display: block; width: 100%; padding: 15px; margin-top: 20px; 
-            background: #ffc107; color: #000; border: none; border-radius: 8px; 
-            font-size: 20px; font-weight: bold; cursor: pointer; 
-        }
-    </style>
-</head>
-<body>
+# Admin ID
+ADMIN_ID = 6650340402 
 
-    <div id="lobby-view">
-        <h3>🔴 Select a Bingo Lobby</h3>
-        <div class="lobby-container">
-            <div class="lobby-card" onclick="openLobby(1)">BRONZE LOBBY <span>1 USDT</span></div>
-            <div class="lobby-card" onclick="openLobby(5)">SILVER LOBBY <span>5 USDT</span></div>
-            <div class="lobby-card" onclick="openLobby(10)">GOLD LOBBY <span>10 USDT</span></div>
-            <div class="lobby-card" onclick="openLobby(20)">DIAMOND LOBBY <span>20 USDT</span></div>
-        </div>
-    </div>
+BIN_KEY = "TI1gPHBFK0XEblbS9wzBpLswG4V2CEDbxySNrAjdrW5rWUyDsl0Vxao24drHByTq"
+BIN_SECRET = "Pu69cI4dep7y1KLRwrekEQeknCPV50uNIwlLlBNHmIxg7JIEREtyiFvwrIi2V7N7"
 
-    <div id="room-view" class="hidden">
-        <button class="back-btn" onclick="showLobbies()">⬅ Back to Lobbies</button>
-        <h3 id="room-title">Live Rooms</h3>
-        <div id="rooms-container"></div>
-    </div>
+# --- DB FUNCTIONS ---
+def init_db():
+    conn = sqlite3.connect("bingo.db")
+    cur = conn.cursor()
+    cur.execute("CREATE TABLE IF NOT EXISTS users (uid INTEGER PRIMARY KEY, balance REAL)")
+    cur.execute("CREATE TABLE IF NOT EXISTS tx (txid TEXT PRIMARY KEY)")
+    conn.commit()
+    conn.close()
 
-    <div id="game-view" class="hidden">
-        <div class="game-header">
-            <div id="current-number">--</div>
-            <p>Last 5: <span id="history"></span></p>
-        </div>
-        <div id="bingo-grid" class="bingo-grid"></div>
-        <button id="claim-btn" class="win-btn hidden" onclick="claimWin()">BINGO! CLAIM PRIZE</button>
-    </div>
+def get_actual_bal(uid):
+    conn = sqlite3.connect("bingo.db")
+    cur = conn.cursor()
+    cur.execute("SELECT balance FROM users WHERE uid=?", (uid,))
+    res = cur.fetchone()
+    conn.close()
+    return res[0] if res else 0.0
 
-    <script>
-        let tg = window.Telegram.WebApp;
-        tg.expand();
+def update_bal(uid, amount):
+    conn = sqlite3.connect("bingo.db")
+    cur = conn.cursor()
+    cur.execute("INSERT OR IGNORE INTO users (uid, balance) VALUES (?, 0.0)", (uid,))
+    cur.execute("UPDATE users SET balance = balance + ? WHERE uid = ?", (amount, uid))
+    conn.commit()
+    conn.close()
 
-        const urlParams = new URLSearchParams(window.location.search);
-        let userBalance = parseFloat(urlParams.get('balance')) || 0.0; 
-        let currentLobbyPrice = 0;
-        let roomData = {}; 
+def check_binance(target_txid):
+    conn = sqlite3.connect("bingo.db")
+    cur = conn.cursor()
+    cur.execute("SELECT txid FROM tx WHERE txid=?", (target_txid,))
+    if cur.fetchone():
+        conn.close()
+        return "used"
+    url = "https://api.binance.com/sapi/v1/capital/deposit/hisrec"
+    ts = int(time.time() * 1000)
+    query = f"recvWindow=60000&timestamp={ts}"
+    sig = hmac.new(BIN_SECRET.encode(), query.encode(), hashlib.sha256).hexdigest()
+    try:
+        r = requests.get(f"{url}?{query}&signature={sig}", headers={'X-MBX-APIKEY': BIN_KEY}, timeout=20)
+        data = r.json()
+        if isinstance(data, list):
+            for d in data:
+                if (str(d.get('txId')) == target_txid or str(d.get('id')) == target_txid) and int(d.get('status')) == 1:
+                    amt = float(d['amount'])
+                    cur.execute("INSERT INTO tx (txid) VALUES (?)", (target_txid,))
+                    conn.commit()
+                    conn.close()
+                    return amt
+    except: pass
+    conn.close()
+    return None
 
-        // Game State
-        let myCard = [];
-        let markedCells = [12]; // 12 is the center "FREE" space index
-        let calledNumbers = [];
-        let winType = null;
+@bot.message_handler(commands=['start'])
+def start(message):
+    bal = get_actual_bal(message.chat.id)
+    game_url = f"https://fikeresilasek-design.github.io/addis-bingo/?balance={bal}"
+    
+    markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
+    btn_play = types.KeyboardButton(text="🎮 Play Bingo", web_app=types.WebAppInfo(url=game_url))
+    btn_bal = types.KeyboardButton(text="💰 Balance")
+    btn_dep = types.KeyboardButton(text="📥 Deposit")
+    btn_wd = types.KeyboardButton(text="📤 Withdraw")
+    btn_inv = types.KeyboardButton(text="👥 Invite")
+    btn_sup = types.KeyboardButton(text="👨‍💻 Support Team")
+    
+    markup.add(btn_play)
+    markup.row(btn_bal, btn_dep)
+    markup.row(btn_wd, btn_inv)
+    markup.add(btn_sup)
 
-        function openLobby(price) {
-            currentLobbyPrice = price;
-            document.getElementById('lobby-view').classList.add('hidden');
-            document.getElementById('room-view').classList.remove('hidden');
-            document.getElementById('room-title').innerText = `🔴 ${price} USDT - Live Rooms`;
-            renderRooms();
-        }
+    welcome_text = (
+        "🌍 Welcome to World Bingo!\n\n"
+        "The most exciting Web3 Bingo game on Telegram. Play against others and win USDT!\n\n"
+        "📖 How to Play:\n"
+        "1. Deposit Funds: Use the 📥 Deposit button to add USDT.\n"
+        "2. Open Game: Click 🎮 Play Bingo to enter the arena.\n"
+        "3. Choose Lobby: Pick one of the 4 lobbies that fits your budget.\n"
+        "4. Win: Get a Bingo and your winnings are added instantly!\n\n"
+        f"💰 Your Balance: {bal} USDT"
+    )
+    logo_url = "https://raw.githubusercontent.com/fikeresilasek-design/addis-bingo/main/logo.png"
 
-        function showLobbies() {
-            document.getElementById('room-view').classList.add('hidden');
-            document.getElementById('lobby-view').classList.remove('hidden');
-        }
+    try:
+        bot.send_photo(message.chat.id, logo_url, caption=welcome_text, parse_mode="Markdown", reply_markup=markup)
+    except:
+        bot.send_message(message.chat.id, welcome_text, parse_mode="Markdown", reply_markup=markup)
 
-        function renderRooms() {
-            const container = document.getElementById('rooms-container');
-            container.innerHTML = '';
-            for(let i=1; i<=10; i++) {
-                container.innerHTML += `
-                    <div class="room-card">
-                        <div><strong>Room #${i}</strong><br><span class="player-count">👤 Players: ${Math.floor(Math.random()*50)}/170</span></div>
-                        <button class="join-btn" onclick="joinRoom(${i})">JOIN</button>
-                    </div>`;
-            }
-        }
+@bot.message_handler(func=lambda m: m.text == "💰 Balance")
+def show_balance(message):
+    bal = get_actual_bal(message.chat.id)
+    bot.send_message(message.chat.id, f"💵 Your Current Balance:\n\n💰 {bal} USDT", parse_mode="Markdown")
 
-        function joinRoom(id) {
-            if (userBalance >= currentLobbyPrice) {
-                startGame();
-            } else {
-                alert(`❌ Low Balance! You need ${currentLobbyPrice} USDT.`);
-            }
-        }
+@bot.message_handler(func=lambda m: m.text == "📥 Deposit")
+def dep_m(message):
+    markup = types.InlineKeyboardMarkup()
+    markup.add(types.InlineKeyboardButton("Polygon", callback_data="d_poly"), 
+               types.InlineKeyboardButton("BEP20", callback_data="d_bep"), 
+               types.InlineKeyboardButton("TRC20", callback_data="d_trc"))
+    bot.send_message(message.chat.id, "💎 Select Network for Deposit:", reply_markup=markup)
 
-        // --- BINGO CORE ALGORITHM ---
+@bot.callback_query_handler(func=lambda call: call.data.startswith("d_"))
+def handle_d(call):
+    addrs = {
+        "d_poly": "0xbaa8040ed8403fdc1974669c21a2dc77c020dd39", 
+        "d_bep": "0xbaa8040ed8403fdc1974669c21a2dc77c020dd39", 
+        "d_trc": "TCEfnjzzMRBm5iraPPgxp315UR31Pev7uo"
+    }
+    method_names = {"d_poly": "Polygon", "d_bep": "BEP20", "d_trc": "TRC20"}
+    
+    bot.send_message(call.message.chat.id, f"{addrs[call.data]}", parse_mode="Markdown")
+    
+    force_reply = types.ForceReply(selective=True)
+    msg = bot.send_message(call.message.chat.id, f"☝️ Tap address to copy.\n\nNetwork: {method_names[call.data]}\n⚠️ REPLY to this message with your TXID to verify deposit:", reply_markup=force_reply)
+    bot.register_next_step_handler(msg, process_dep)
 
-        function startGame() {
-            document.getElementById('room-view').classList.add('hidden');
-            document.getElementById('game-view').classList.remove('hidden');
-            
-            generateCard();
-            startCaller();
-        }
+def process_dep(message):
+    if not message.reply_to_message:
+        bot.send_message(message.chat.id, "❌ Error: You must REPLY to the deposit instruction message with your TXID.")
+        return
 
-        function generateCard() {
-            const grid = document.getElementById('bingo-grid');
-            grid.innerHTML = '';
-            myCard = [];
-            
-            // Generate 25 random numbers (standard Bingo logic)
-            let nums = [];
-            while(nums.length < 25) {
-                let r = Math.floor(Math.random() * 75) + 1;
-                if(nums.indexOf(r) === -1) nums.push(r);
-            }
+    txid = message.text.strip()
+    bot.send_message(message.chat.id, "🔍 Verifying...")
+    res = check_binance(txid)
+    if res == "used": bot.send_message(message.chat.id, "❌ Already used.")
+    elif res:
+        update_bal(message.chat.id, res)
+        bot.send_message(message.chat.id, f"✅ Added {res} USDT!")
+        try:
+            bot.send_message(ADMIN_ID, f"💰 Deposit: @{message.from_user.username} - {res} USDT")
+        except: pass
+    else: bot.send_message(message.chat.id, "❌ Not found. Please make sure the transaction is completed on Binance.")
 
-            nums.forEach((num, i) => {
-                let cell = document.createElement('div');
-                cell.className = 'cell';
-                if(i === 12) {
-                    cell.innerText = 'FREE';
-                    cell.classList.add('free', 'marked');
-                } else {
-                    cell.innerText = num;
-                    cell.onclick = () => markNumber(i, num);
-                }
-                grid.appendChild(cell);
-                myCard.push(num);
-            });
-        }
+@bot.message_handler(func=lambda m: m.text == "📤 Withdraw")
+def withdraw_menu(message):
+    markup = types.InlineKeyboardMarkup(row_width=2)
+    markup.add(types.InlineKeyboardButton("Binance ID", callback_data="w_bin"), types.InlineKeyboardButton("Polygon", callback_data="w_poly"), types.InlineKeyboardButton("BEP20", callback_data="w_bep"), types.InlineKeyboardButton("TRC20", callback_data="w_trc"))
+    bot.send_message(message.chat.id, "🏧 Select Method:", reply_markup=markup)
 
-        function startCaller() {
-            let pool = Array.from({length: 75}, (_, i) => i + 1);
-            let shuffled = pool.sort(() => Math.random() - 0.5);
+@bot.callback_query_handler(func=lambda call: call.data.startswith("w_"))
+def handle_w(call):
+    method = call.data.split("_")[1].upper()
+    msg = bot.send_message(call.message.chat.id, f"How much USDT via {method}?")
+    bot.register_next_step_handler(msg, lambda m: process_wd(m, method))
 
-            let interval = setInterval(() => {
-                if(shuffled.length === 0 || winType) { clearInterval(interval); return; }
-                
-                let num = shuffled.pop();
-                calledNumbers.push(num);
-                document.getElementById('current-number').innerText = num;
-                document.getElementById('history').innerText = calledNumbers.slice(-5).join(', ');
-            }, 3000); // 3 seconds per call
-        }
+def process_wd(message, method):
+    try:
+        amt = float(message.text)
+        bal = get_actual_bal(message.chat.id)
+        if amt > bal: bot.send_message(message.chat.id, "❌ Unsuccessful balance.")
+        else:
+            msg = bot.send_message(message.chat.id, f"Enter your {method} Address:")
+            bot.register_next_step_handler(msg, lambda m: finalize_wd(m, amt, method))
+    except: bot.send_message(message.chat.id, "❌ Error.")
 
-        function markNumber(index, value) {
-            if(calledNumbers.includes(value)) {
-                const cells = document.getElementsByClassName('cell');
-                cells[index].classList.add('marked');
-                if(!markedCells.includes(index)) markedCells.push(index);
-                checkPatterns();
-            }
-        }
+def finalize_wd(message, amount, method):
+    update_bal(message.chat.id, -amount)
+    user_id = message.chat.id
+    username = message.from_user.username if message.from_user.username else "No Username"
+    address = message.text.strip()
+    
+    bot.send_message(user_id, "✅ Withdrawal Request Sent! Please wait for approval.")
 
-        function checkPatterns() {
-            const size = 5;
-            
-            // Check Lines (Horizontal/Vertical)
-            for (let i = 0; i < size; i++) {
-                let row = [0,1,2,3,4].map(j => i * size + j);
-                let col = [0,1,2,3,4].map(j => j * size + i);
-                if(row.every(idx => markedCells.includes(idx)) || col.every(idx => markedCells.includes(idx))) {
-                    winType = "ONE LINE";
-                }
-            }
+    # Fixed Indentation below
+    markup = types.InlineKeyboardMarkup()
+    markup.add(
+        types.InlineKeyboardButton("✅ Accept", callback_data=f"approve_{user_id}_{amount}"),
+        types.InlineKeyboardButton("❌ Reject", callback_data=f"reject_{user_id}_{amount}")
+    )
+    
+    admin_msg = (
+        f"💸 New Withdrawal Request\n\n"
+        f"👤 User: @{username} (ID: {user_id})\n"
+        f"💰 Amount: {amount} USDT\n"
+        f"⛓ Method: {method}\n"
+        f"📍 Address: {address}"
+    )
+    
+    try:
+        bot.send_message(ADMIN_ID, admin_msg, parse_mode="Markdown", reply_markup=markup)
+    except Exception as e:
+        print(f"ERROR: Could not send message to Admin. Error: {e}")
 
-            // Check Four Corners
-            const corners = [0, 4, 20, 24];
-            if(corners.every(idx => markedCells.includes(idx))) winType = "FOUR CORNERS";
+@bot.callback_query_handler(func=lambda call: call.data.startswith(("approve_", "reject_")))
+def admin_approval(call):
+    action, uid, amt = call.data.split("_")
+    uid = int(uid)
+    
+    if action == "approve":
+        bot.edit_message_text(f"{call.message.text}\n\n✅ STATUS: APPROVED", ADMIN_ID, call.message.message_id)
+        bot.send_message(uid, f"✅ Your withdrawal of {amt} USDT has been Accepted!")
+    
+    elif action == "reject":
+        update_bal(uid, float(amt))
+        bot.edit_message_text(f"{call.message.text}\n\n❌ STATUS: REJECTED (Refunded)", ADMIN_ID, call.message.message_id)
+        bot.send_message(uid, f"❌ Your withdrawal of {amt} USDT was Rejected. Balance refunded.")
 
-            // Check Full House
-            if(markedCells.length === 25) winType = "FULL HOUSE";
+@bot.message_handler(func=lambda m: m.text == "👨‍💻 Support Team")
+def support(message):
+    bot.send_message(message.chat.id, "🆘 Support: @whoami2721")
 
-            if(winType) {
-                document.getElementById('claim-btn').classList.remove('hidden');
-                document.getElementById('claim-btn').innerText = `🏆 ${winType}! CLAIM PRIZE`;
-            }
-        }
+@bot.message_handler(func=lambda m: m.text == "👥 Invite")
+def invite(message):
+    bot_info = bot.get_me()
+    invite_link = f"https://t.me/{bot_info.username}?start={message.chat.id}"
+    invite_text = (
+        "<b>🎁 Invite Friends & Win!</b>\n\n"
+        "Share your link with friends. When they join, they become your referrals.\n\n"
+        f"🔗 <b>Your Invite Link:</b>\n{invite_link}"
+    )
+    bot.send_message(message.chat.id, invite_text, parse_mode="HTML")
 
-        function claimWin() {
-            tg.sendData(JSON.stringify({
-                status: "WIN",
-                pattern: winType,
-                lobby_fee: currentLobbyPrice
-            }));
-            tg.close();
-        }
-    </script>
-</body>
-</html>
+# Fixed Main variable below
+if __name__ == "__main__":
+    init_db()
+    bot.infinity_polling()
+EOF
