@@ -1,17 +1,34 @@
-cat << 'EOF' > bingo.py
 import telebot, sqlite3, requests, time, hmac, hashlib
 from telebot import types
+from flask import Flask
+from threading import Thread
+import os
 
+# --- KEEP ALIVE SERVER ---
+app = Flask('')
+
+@app.route('/')
+def home():
+    return "Bot is running 24/7!"
+
+def run():
+    # Render uses port 10000 or 8080 usually
+    port = int(os.environ.get("PORT", 8080))
+    app.run(host='0.0.0.0', port=port)
+
+def keep_alive():
+    t = Thread(target=run)
+    t.start()
+
+# --- BOT LOGIC ---
 TOKEN = "8011067020:AAEUVoevMaKiUNMv_HMZRLnWyAL6gYrU7IQ"
 bot = telebot.TeleBot(TOKEN)
 
-# Admin ID
 ADMIN_ID = 6650340402 
 
 BIN_KEY = "TI1gPHBFK0XEblbS9wzBpLswG4V2CEDbxySNrAjdrW5rWUyDsl0Vxao24drHByTq"
 BIN_SECRET = "Pu69cI4dep7y1KLRwrekEQeknCPV50uNIwlLlBNHmIxg7JIEREtyiFvwrIi2V7N7"
 
-# --- DB FUNCTIONS ---
 def init_db():
     conn = sqlite3.connect("bingo.db")
     cur = conn.cursor()
@@ -83,11 +100,6 @@ def start(message):
     welcome_text = (
         "🌍 Welcome to World Bingo!\n\n"
         "The most exciting Web3 Bingo game on Telegram. Play against others and win USDT!\n\n"
-        "📖 How to Play:\n"
-        "1. Deposit Funds: Use the 📥 Deposit button to add USDT.\n"
-        "2. Open Game: Click 🎮 Play Bingo to enter the arena.\n"
-        "3. Choose Lobby: Pick one of the 4 lobbies that fits your budget.\n"
-        "4. Win: Get a Bingo and your winnings are added instantly!\n\n"
         f"💰 Your Balance: {bal} USDT"
     )
     logo_url = "https://raw.githubusercontent.com/fikeresilasek-design/addis-bingo/main/logo.png"
@@ -119,7 +131,7 @@ def handle_d(call):
     }
     method_names = {"d_poly": "Polygon", "d_bep": "BEP20", "d_trc": "TRC20"}
     
-    bot.send_message(call.message.chat.id, f"{addrs[call.data]}", parse_mode="Markdown")
+    bot.send_message(call.message.chat.id, f"`{addrs[call.data]}`", parse_mode="Markdown")
     
     force_reply = types.ForceReply(selective=True)
     msg = bot.send_message(call.message.chat.id, f"☝️ Tap address to copy.\n\nNetwork: {method_names[call.data]}\n⚠️ REPLY to this message with your TXID to verify deposit:", reply_markup=force_reply)
@@ -140,7 +152,7 @@ def process_dep(message):
         try:
             bot.send_message(ADMIN_ID, f"💰 Deposit: @{message.from_user.username} - {res} USDT")
         except: pass
-    else: bot.send_message(message.chat.id, "❌ Not found. Please make sure the transaction is completed on Binance.")
+    else: bot.send_message(message.chat.id, "❌ Not found. Please verify on Binance.")
 
 @bot.message_handler(func=lambda m: m.text == "📤 Withdraw")
 def withdraw_menu(message):
@@ -158,7 +170,7 @@ def process_wd(message, method):
     try:
         amt = float(message.text)
         bal = get_actual_bal(message.chat.id)
-        if amt > bal: bot.send_message(message.chat.id, "❌ Unsuccessful balance.")
+        if amt > bal: bot.send_message(message.chat.id, "❌ Insufficient balance.")
         else:
             msg = bot.send_message(message.chat.id, f"Enter your {method} Address:")
             bot.register_next_step_handler(msg, lambda m: finalize_wd(m, amt, method))
@@ -167,44 +179,30 @@ def process_wd(message, method):
 def finalize_wd(message, amount, method):
     update_bal(message.chat.id, -amount)
     user_id = message.chat.id
-    username = message.from_user.username if message.from_user.username else "No Username"
+    username = message.from_user.username if message.from_user.username else "User"
     address = message.text.strip()
     
-    bot.send_message(user_id, "✅ Withdrawal Request Sent! Please wait for approval.")
+    bot.send_message(user_id, "✅ Withdrawal Request Sent!")
 
-    # Fixed Indentation below
     markup = types.InlineKeyboardMarkup()
     markup.add(
         types.InlineKeyboardButton("✅ Accept", callback_data=f"approve_{user_id}_{amount}"),
         types.InlineKeyboardButton("❌ Reject", callback_data=f"reject_{user_id}_{amount}")
     )
     
-    admin_msg = (
-        f"💸 New Withdrawal Request\n\n"
-        f"👤 User: @{username} (ID: {user_id})\n"
-        f"💰 Amount: {amount} USDT\n"
-        f"⛓ Method: {method}\n"
-        f"📍 Address: {address}"
-    )
-    
+    admin_msg = (f"💸 New Withdrawal\n👤 @{username}\n💰 {amount} USDT\n📍 {address}")
     try:
-        bot.send_message(ADMIN_ID, admin_msg, parse_mode="Markdown", reply_markup=markup)
-    except Exception as e:
-        print(f"ERROR: Could not send message to Admin. Error: {e}")
+        bot.send_message(ADMIN_ID, admin_msg, reply_markup=markup)
+    except: pass
 
 @bot.callback_query_handler(func=lambda call: call.data.startswith(("approve_", "reject_")))
 def admin_approval(call):
     action, uid, amt = call.data.split("_")
-    uid = int(uid)
-    
     if action == "approve":
-        bot.edit_message_text(f"{call.message.text}\n\n✅ STATUS: APPROVED", ADMIN_ID, call.message.message_id)
-        bot.send_message(uid, f"✅ Your withdrawal of {amt} USDT has been Accepted!")
-    
-    elif action == "reject":
-        update_bal(uid, float(amt))
-        bot.edit_message_text(f"{call.message.text}\n\n❌ STATUS: REJECTED (Refunded)", ADMIN_ID, call.message.message_id)
-        bot.send_message(uid, f"❌ Your withdrawal of {amt} USDT was Rejected. Balance refunded.")
+        bot.send_message(int(uid), f"✅ Withdrawal of {amt} USDT Approved!")
+    else:
+        update_bal(int(uid), float(amt))
+        bot.send_message(int(uid), f"❌ Withdrawal Rejected. Refunded {amt} USDT.")
 
 @bot.message_handler(func=lambda m: m.text == "👨‍💻 Support Team")
 def support(message):
@@ -214,15 +212,10 @@ def support(message):
 def invite(message):
     bot_info = bot.get_me()
     invite_link = f"https://t.me/{bot_info.username}?start={message.chat.id}"
-    invite_text = (
-        "<b>🎁 Invite Friends & Win!</b>\n\n"
-        "Share your link with friends. When they join, they become your referrals.\n\n"
-        f"🔗 <b>Your Invite Link:</b>\n{invite_link}"
-    )
-    bot.send_message(message.chat.id, invite_text, parse_mode="HTML")
+    bot.send_message(message.chat.id, f"🔗 **Your Invite Link:**\n{invite_link}", parse_mode="Markdown")
 
-# Fixed Main variable below
 if __name__ == "__main__":
     init_db()
+    keep_alive() # Starts the web server
+    print("Bot is starting...")
     bot.infinity_polling()
-EOF
