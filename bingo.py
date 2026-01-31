@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Addis Bingo - Live Rooms</title>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <style>
+        body { background: #1a0b2e; color: white; font-family: 'Segoe UI', sans-serif; margin: 0; padding: 15px; overflow-x: hidden; }
+        .hidden { display: none; }
+        
+        /* Lobby Selection Styles */
+        .lobby-container { display: flex; flex-direction: column; gap: 12px; margin-top: 20px; }
+        .lobby-card { 
+            background: #2a1b3d; padding: 20px; border-radius: 12px; 
+            border: 2px solid #7b1fa2; display: flex; justify-content: space-between; align-items: center;
+            cursor: pointer; font-size: 18px; font-weight: bold;
+        }
+        .lobby-card span { color: #00e676; font-size: 20px; }
+
+        /* Room List Styles */
+        .room-card { 
+            background: #2a1b3d; margin: 10px 0; padding: 15px; 
+            border-radius: 12px; border: 1px solid #7b1fa2;
+            display: flex; justify-content: space-between; align-items: center;
+        }
+        .player-count { font-size: 14px; color: #b388ff; }
+        .timer-active { color: #ff5252; font-weight: bold; animation: blink 1s infinite; }
+        .join-btn { background: #00e676; color: #000; border: none; padding: 10px 25px; border-radius: 8px; font-weight: bold; cursor: pointer; }
+        .back-btn { background: #444; color: white; border: none; padding: 8px 15px; border-radius: 5px; margin-bottom: 15px; cursor: pointer; }
+        @keyframes blink { 50% { opacity: 0.5; } }
+
+        /* --- BINGO GAME STYLES --- */
+        .game-header { text-align: center; margin-bottom: 20px; }
+        #current-number { font-size: 48px; color: #00e676; background: #000; display: inline-block; padding: 10px 20px; border-radius: 50%; border: 3px solid #7b1fa2; }
+        .bingo-grid { 
+            display: grid; grid-template-columns: repeat(5, 1fr); gap: 5px; 
+            max-width: 350px; margin: 0 auto; background: #7b1fa2; padding: 5px; border-radius: 8px;
+        }
+        .cell { 
+            background: #2a1b3d; aspect-ratio: 1; display: flex; align-items: center; 
+            justify-content: center; font-size: 18px; font-weight: bold; cursor: pointer; border-radius: 4px;
+        }
+        .cell.marked { background: #00e676; color: #000; }
+        .cell.free { background: #ff5252; font-size: 12px; }
+        .win-btn { 
+            display: block; width: 100%; padding: 15px; margin-top: 20px; 
+            background: #ffc107; color: #000; border: none; border-radius: 8px; 
+            font-size: 20px; font-weight: bold; cursor: pointer; 
+        }
+    </style>
+</head>
+<body>
+
+    <div id="lobby-view">
+        <h3>🔴 Select a Bingo Lobby</h3>
+        <div class="lobby-container">
+            <div class="lobby-card" onclick="openLobby(1)">BRONZE LOBBY <span>1 USDT</span></div>
+            <div class="lobby-card" onclick="openLobby(5)">SILVER LOBBY <span>5 USDT</span></div>
+            <div class="lobby-card" onclick="openLobby(10)">GOLD LOBBY <span>10 USDT</span></div>
+            <div class="lobby-card" onclick="openLobby(20)">DIAMOND LOBBY <span>20 USDT</span></div>
+        </div>
+    </div>
+
+    <div id="room-view" class="hidden">
+        <button class="back-btn" onclick="showLobbies()">⬅ Back to Lobbies</button>
+        <h3 id="room-title">Live Rooms</h3>
+        <div id="rooms-container"></div>
+    </div>
+
+    <div id="game-view" class="hidden">
+        <div class="game-header">
+            <div id="current-number">--</div>
+            <p>Last 5: <span id="history"></span></p>
+        </div>
+        <div id="bingo-grid" class="bingo-grid"></div>
+        <button id="claim-btn" class="win-btn hidden" onclick="claimWin()">BINGO! CLAIM PRIZE</button>
+    </div>
+
+    <script>
+        let tg = window.Telegram.WebApp;
+        tg.expand();
+
+        const urlParams = new URLSearchParams(window.location.search);
+        let userBalance = parseFloat(urlParams.get('balance')) || 0.0; 
+        let currentLobbyPrice = 0;
+        let roomData = {}; 
+
+        // Game State
+        let myCard = [];
+        let markedCells = [12]; // 12 is the center "FREE" space index
+        let calledNumbers = [];
+        let winType = null;
+
+        function openLobby(price) {
+            currentLobbyPrice = price;
+            document.getElementById('lobby-view').classList.add('hidden');
+            document.getElementById('room-view').classList.remove('hidden');
+            document.getElementById('room-title').innerText = `🔴 ${price} USDT - Live Rooms`;
+            renderRooms();
+        }
+
+        function showLobbies() {
+            document.getElementById('room-view').classList.add('hidden');
+            document.getElementById('lobby-view').classList.remove('hidden');
+        }
+
+        function renderRooms() {
+            const container = document.getElementById('rooms-container');
+            container.innerHTML = '';
+            for(let i=1; i<=10; i++) {
+                container.innerHTML += `
+                    <div class="room-card">
+                        <div><strong>Room #${i}</strong><br><span class="player-count">👤 Players: ${Math.floor(Math.random()*50)}/170</span></div>
+                        <button class="join-btn" onclick="joinRoom(${i})">JOIN</button>
+                    </div>`;
+            }
+        }
+
+        function joinRoom(id) {
+            if (userBalance >= currentLobbyPrice) {
+                startGame();
+            } else {
+                alert(`❌ Low Balance! You need ${currentLobbyPrice} USDT.`);
+            }
+        }
+
+        // --- BINGO CORE ALGORITHM ---
+
+        function startGame() {
+            document.getElementById('room-view').classList.add('hidden');
+            document.getElementById('game-view').classList.remove('hidden');
+            
+            generateCard();
+            startCaller();
+        }
+
+        function generateCard() {
+            const grid = document.getElementById('bingo-grid');
+            grid.innerHTML = '';
+            myCard = [];
+            
+            // Generate 25 random numbers (standard Bingo logic)
+            let nums = [];
+            while(nums.length < 25) {
+                let r = Math.floor(Math.random() * 75) + 1;
+                if(nums.indexOf(r) === -1) nums.push(r);
+            }
+
+            nums.forEach((num, i) => {
+                let cell = document.createElement('div');
+                cell.className = 'cell';
+                if(i === 12) {
+                    cell.innerText = 'FREE';
+                    cell.classList.add('free', 'marked');
+                } else {
+                    cell.innerText = num;
+                    cell.onclick = () => markNumber(i, num);
+                }
+                grid.appendChild(cell);
+                myCard.push(num);
+            });
+        }
+
+        function startCaller() {
+            let pool = Array.from({length: 75}, (_, i) => i + 1);
+            let shuffled = pool.sort(() => Math.random() - 0.5);
+
+            let interval = setInterval(() => {
+                if(shuffled.length === 0 || winType) { clearInterval(interval); return; }
+                
+                let num = shuffled.pop();
+                calledNumbers.push(num);
+                document.getElementById('current-number').innerText = num;
+                document.getElementById('history').innerText = calledNumbers.slice(-5).join(', ');
+            }, 3000); // 3 seconds per call
+        }
+
+        function markNumber(index, value) {
+            if(calledNumbers.includes(value)) {
+                const cells = document.getElementsByClassName('cell');
+                cells[index].classList.add('marked');
+                if(!markedCells.includes(index)) markedCells.push(index);
+                checkPatterns();
+            }
+        }
+
+        function checkPatterns() {
+            const size = 5;
+            
+            // Check Lines (Horizontal/Vertical)
+            for (let i = 0; i < size; i++) {
+                let row = [0,1,2,3,4].map(j => i * size + j);
+                let col = [0,1,2,3,4].map(j => j * size + i);
+                if(row.every(idx => markedCells.includes(idx)) || col.every(idx => markedCells.includes(idx))) {
+                    winType = "ONE LINE";
+                }
+            }
+
+            // Check Four Corners
+            const corners = [0, 4, 20, 24];
+            if(corners.every(idx => markedCells.includes(idx))) winType = "FOUR CORNERS";
+
+            // Check Full House
+            if(markedCells.length === 25) winType = "FULL HOUSE";
+
+            if(winType) {
+                document.getElementById('claim-btn').classList.remove('hidden');
+                document.getElementById('claim-btn').innerText = `🏆 ${winType}! CLAIM PRIZE`;
+            }
+        }
+
+        function claimWin() {
+            tg.sendData(JSON.stringify({
+                status: "WIN",
+                pattern: winType,
+                lobby_fee: currentLobbyPrice
+            }));
+            tg.close();
+        }
+    </script>
+</body>
+</html>
