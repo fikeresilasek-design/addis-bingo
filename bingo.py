@@ -12,7 +12,6 @@ def home():
     return "Bot is running 24/7!"
 
 def run():
-    # Render uses port 10000 or 8080 usually
     port = int(os.environ.get("PORT", 8080))
     app.run(host='0.0.0.0', port=port)
 
@@ -53,6 +52,7 @@ def update_bal(uid, amount):
     conn.commit()
     conn.close()
 
+# --- FASTER CHECKING FUNCTION ---
 def check_binance(target_txid):
     conn = sqlite3.connect("bingo.db")
     cur = conn.cursor()
@@ -60,22 +60,33 @@ def check_binance(target_txid):
     if cur.fetchone():
         conn.close()
         return "used"
+    
     url = "https://api.binance.com/sapi/v1/capital/deposit/hisrec"
-    ts = int(time.time() * 1000)
-    query = f"recvWindow=60000&timestamp={ts}"
-    sig = hmac.new(BIN_SECRET.encode(), query.encode(), hashlib.sha256).hexdigest()
-    try:
-        r = requests.get(f"{url}?{query}&signature={sig}", headers={'X-MBX-APIKEY': BIN_KEY}, timeout=20)
-        data = r.json()
-        if isinstance(data, list):
-            for d in data:
-                if (str(d.get('txId')) == target_txid or str(d.get('id')) == target_txid) and int(d.get('status')) == 1:
-                    amt = float(d['amount'])
-                    cur.execute("INSERT INTO tx (txid) VALUES (?)", (target_txid,))
-                    conn.commit()
-                    conn.close()
-                    return amt
-    except: pass
+    
+    # Try 2 times quickly if first one fails
+    for _ in range(2):
+        ts = int(time.time() * 1000)
+        # Reduced recvWindow to 5000ms for faster server sync
+        query = f"recvWindow=5000&timestamp={ts}"
+        sig = hmac.new(BIN_SECRET.encode(), query.encode(), hashlib.sha256).hexdigest()
+        
+        try:
+            # Reduced timeout to 5s for faster error recovery
+            r = requests.get(f"{url}?{query}&signature={sig}", 
+                             headers={'X-MBX-APIKEY': BIN_KEY}, timeout=5)
+            data = r.json()
+            if isinstance(data, list):
+                for d in data:
+                    if (str(d.get('txId')) == target_txid or str(d.get('id')) == target_txid) and int(d.get('status')) == 1:
+                        amt = float(d['amount'])
+                        cur.execute("INSERT INTO tx (txid) VALUES (?)", (target_txid,))
+                        conn.commit()
+                        conn.close()
+                        return amt
+        except:
+            time.sleep(1) # Wait 1 second before retry
+            continue
+            
     conn.close()
     return None
 
@@ -216,6 +227,6 @@ def invite(message):
 
 if __name__ == "__main__":
     init_db()
-    keep_alive() # Starts the web server
+    keep_alive()
     print("Bot is starting...")
     bot.infinity_polling()
