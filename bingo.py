@@ -52,7 +52,6 @@ def update_bal(uid, amount):
     conn.commit()
     conn.close()
 
-# --- FASTER CHECKING FUNCTION ---
 def check_binance(target_txid):
     conn = sqlite3.connect("bingo.db")
     cur = conn.cursor()
@@ -63,15 +62,12 @@ def check_binance(target_txid):
     
     url = "https://api.binance.com/sapi/v1/capital/deposit/hisrec"
     
-    # Try 2 times quickly if first one fails
     for _ in range(2):
         ts = int(time.time() * 1000)
-        # Reduced recvWindow to 5000ms for faster server sync
-        query = f"recvWindow=5000&timestamp={ts}"
+        query = f"recvWindow=60000&timestamp={ts}"
         sig = hmac.new(BIN_SECRET.encode(), query.encode(), hashlib.sha256).hexdigest()
         
         try:
-            # Reduced timeout to 5s for faster error recovery
             r = requests.get(f"{url}?{query}&signature={sig}", 
                              headers={'X-MBX-APIKEY': BIN_KEY}, timeout=5)
             data = r.json()
@@ -84,7 +80,7 @@ def check_binance(target_txid):
                         conn.close()
                         return amt
         except:
-            time.sleep(1) # Wait 1 second before retry
+            time.sleep(1)
             continue
             
     conn.close()
@@ -219,11 +215,21 @@ def admin_approval(call):
 def support(message):
     bot.send_message(message.chat.id, "🆘 Support: @whoami2721")
 
+# --- UPDATED INVITE FUNCTION ---
 @bot.message_handler(func=lambda m: m.text == "👥 Invite")
 def invite(message):
-    bot_info = bot.get_me()
-    invite_link = f"https://t.me/{bot_info.username}?start={message.chat.id}"
-    bot.send_message(message.chat.id, f"🔗 **Your Invite Link:**\n{invite_link}", parse_mode="Markdown")
+    bot_username = bot.get_me().username
+    invite_link = f"https://t.me/{bot_username}?start={message.chat.id}"
+    
+    markup = types.InlineKeyboardMarkup()
+    markup.add(types.InlineKeyboardButton("📤 Send to Friend", url=f"https://t.me/share/url?url={invite_link}"))
+
+    invite_text = (
+        "<b>🎁 Your Referral Link:</b>\n\n"
+        f"<code>{invite_link}</code>\n\n"
+        "Tap the link to copy, or share with the button!"
+    )
+    bot.send_message(message.chat.id, invite_text, parse_mode="HTML", reply_markup=markup)
 
 if __name__ == "__main__":
     init_db()
